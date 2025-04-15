@@ -4,8 +4,9 @@
  * @details This file contains the definition of the Robomas class, which represents a motor controller, and the RobomasSender class, which handles CAN communication with the motor controller.
  * The Robomas class provides methods for configuring and controlling the motor, while the RobomasSender class manages the sending and receiving of CAN messages.
  * @author Yunoshin Tani (taniyunoshin@gmail.com)
+ * @since 2025-04-16
  * @date 2025-04-16
- * @version 0.0.0
+ * @version 0.0.1
  * 
  * @warning This code has not been tested yet.
  */
