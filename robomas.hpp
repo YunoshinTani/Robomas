@@ -6,7 +6,7 @@
  * @author Yunoshin Tani (taniyunoshin@gmail.com)
  * @since 2025-04-16
  * @date 2025-04-16
- * @version 0.0.1
+ * @version 0.1.0
  * 
  * @warning This code has not been tested yet.
  */
@@ -30,6 +30,7 @@ public:
     ~RobomasSender();
     void SetRobomas(Robomas* robomas);
     void Start();
+    
     bool Send();
     void Read();
 
@@ -54,7 +55,9 @@ public:
     void Init();
 
     // SetConfigure
+    void SetID(uint16_t id);
     void SetMotorNum(uint8_t number);
+    void SetMotorType(MotorType type);
     void SetTorqueLimit(int16_t limit);
 
     // GetConfigure
@@ -67,7 +70,7 @@ public:
     void SetTorque(int16_t torque);
     void SetSpeed(uint8_t speed);
     void SetPosition(int16_t position);
-    void StopMotor();
+    void SetBrake();
 
     // main read
     int16_t GetMotorTorque();

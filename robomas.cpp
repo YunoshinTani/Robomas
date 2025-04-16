@@ -6,7 +6,7 @@
  * @author Yunoshin Tani (taniyunoshin@gmail.com)
  * @since 2025-04-16
  * @date 2025-04-16
- * @version 0.0.1
+ * @version 0.1.0
  * 
  * @warning This code has not been tested yet.
  */
@@ -103,8 +103,14 @@ void Robomas::Init() {
 }
 
 // set configure
+void Robomas::SetID(uint16_t id) {
+    _id = id;
+}
 void Robomas::SetMotorNum(uint8_t number) {
     _motor_num = number;
+}
+void Robomas::SetMotorType(MotorType type)  {
+    _type = type;
 }
 void Robomas::SetTorqueLimit(int16_t limit) {
     _torque_limit = limit;
@@ -132,6 +138,9 @@ void Robomas::SetSpeed(uint8_t speed) {
     // PIDを実装
 }
 void Robomas::SetPosition(int16_t position) {
+    // PIDを実装
+}
+void Robomas::SetBrake() {
     // PIDを実装
 }
 
