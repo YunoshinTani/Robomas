@@ -5,8 +5,8 @@
  * The Robomas class provides methods for configuring and controlling the motor, while the RobomasSender class manages the sending and receiving of CAN messages.
  * @author Yunoshin Tani (taniyunoshin@gmail.com)
  * @since 2025-04-16
- * @date 2025-04-16
- * @version 1.0.1
+ * @date 2025-04-17
+ * @version 2.0.0
  * 
  * @warning This code has not been tested yet.
  */
@@ -15,6 +15,11 @@
 #define ROBOMAS_HPP
 
 #include "mbed.h"
+
+#define CAN_FREQUENCY 1000000 // CAN bus frequency (1 Mbps)
+#define MAX_MOTOR_NUM 8 // Maximum number of motors
+#define M2006_MAX_TORQUE 5000 // Maximum torque for M2006 motor
+#define M3508_MAX_TORQUE 7000 // Maximum torque for M3508 motor
 
 enum class MotorType {
     M2006,
@@ -32,7 +37,7 @@ class RobomasSender; // Forward declaration
  */
 class Robomas {
 public:
-    Robomas(RobomasSender& sender, MotorType type, uint8_t motor_num);
+    Robomas(MotorType type, uint8_t motor_num);
     ~Robomas();
 
     // base functionality
@@ -43,13 +48,13 @@ public:
     void Init();
 
     // SetConfigure
-    void SetID(uint16_t id);
+    void SetId(uint16_t id);
     void SetMotorNum(uint8_t number);
     void SetMotorType(MotorType type);
     void SetTorqueLimit(int16_t limit);
 
     // GetConfigure
-    uint16_t GetID() const;
+    uint16_t GetId() const;
     uint8_t GetMotorNum() const;
     MotorType GetMotorType() const;
     int16_t GetTorqueLimit() const;
@@ -74,6 +79,7 @@ private:
     uint16_t _feedback_id;
     uint8_t _motor_num;
     int16_t _torque_limit;
+    int16_t _max_torque_limit;
 };
 
 /**
@@ -86,6 +92,7 @@ class RobomasSender {
 public:
     RobomasSender(CAN& can);
     ~RobomasSender();
+    void InitCan();
     void SetRobomas(Robomas* robomas);
     void Start();
 
@@ -94,10 +101,11 @@ public:
 
     uint8_t GetWriteError();
     uint8_t GetReadError();
+    bool GetBusOn();
     void CanReset();
 private:
     CAN& _can;
-    Robomas* _robomas[8];
+    Robomas* _robomas;
 };
 
 #endif // ROBOMAS_HPP
