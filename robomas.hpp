@@ -6,7 +6,7 @@
  * @author Yunoshin Tani (taniyunoshin@gmail.com)
  * @since 2025-04-16
  * @date 2025-04-16
- * @version 0.1.0
+ * @version 1.0.1
  * 
  * @warning This code has not been tested yet.
  */
@@ -22,26 +22,14 @@ enum class MotorType {
     GM6020,
 };
 
-class Robomas;
+class Robomas; // Forward declaration
+class RobomasSender; // Forward declaration
 
-class RobomasSender {
-public:
-    RobomasSender(CAN& can);
-    ~RobomasSender();
-    void SetRobomas(Robomas* robomas);
-    void Start();
-    
-    bool Send();
-    void Read();
-
-    uint8_t GetWriteError();
-    uint8_t GetReadError();
-    void CanReset();
-private:
-    CAN& _can;
-    Robomas* _robomas;
-};
-
+/**
+ * @brief Class for controlling a Robomas motor.
+ * @details This class provides methods for configuring and controlling the motor, including setting torque, speed, and position.
+ * @author Yunoshin Tani (taniyunoshin@gmail.com)
+ */
 class Robomas {
 public:
     Robomas(RobomasSender& sender, MotorType type, uint8_t motor_num);
@@ -61,8 +49,8 @@ public:
     void SetTorqueLimit(int16_t limit);
 
     // GetConfigure
-    int GetID() const;
-    int GetMotorNum() const;
+    uint16_t GetID() const;
+    uint8_t GetMotorNum() const;
     MotorType GetMotorType() const;
     int16_t GetTorqueLimit() const;
 
@@ -78,17 +66,38 @@ public:
     int16_t GetMotorPosition();
 
 protected:
-    int send_buff[4] = {0, 0, 0, 0};
+    int16_t send_buff = 0;
     int16_t read_data[4] = {0, 0, 0, 0};
 
 private:
-    RobomasSender& _sender;
-
     MotorType _type;
-    int _id;
+    uint16_t _feedback_id;
     uint8_t _motor_num;
     int16_t _torque_limit;
+};
 
+/**
+ * @brief Class for handling CAN communication with the Robomas motor controller.
+ * @details This class manages the sending and receiving of CAN messages to and from the Robomas motor controller.
+ * It provides methods for initializing communication, sending commands, and reading feedback.
+ * @author Yunoshin Tani (taniyunoshin@gmail.com)
+ */
+class RobomasSender {
+public:
+    RobomasSender(CAN& can);
+    ~RobomasSender();
+    void SetRobomas(Robomas* robomas);
+    void Start();
+
+    bool Send();
+    void Read();
+
+    uint8_t GetWriteError();
+    uint8_t GetReadError();
+    void CanReset();
+private:
+    CAN& _can;
+    Robomas* _robomas[8];
 };
 
 #endif // ROBOMAS_HPP
