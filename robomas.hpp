@@ -5,10 +5,8 @@
  * The Robomas class provides methods for configuring and controlling the motor, while the RobomasSender class manages the sending and receiving of CAN messages.
  * @author Yunoshin Tani (taniyunoshin@gmail.com)
  * @since 2025-04-16
- * @date 2025-04-17
- * @version 2.0.0
- * 
- * @warning This code has not been tested yet.
+ * @date 2025-04-19
+ * @version 3.0.0
  */
 
 #ifndef ROBOMAS_HPP
@@ -16,15 +14,16 @@
 
 #include "mbed.h"
 
-#define CAN_FREQUENCY 1000000 // CAN bus frequency (1 Mbps)
-#define MAX_MOTOR_NUM 8 // Maximum number of motors
-#define M2006_MAX_TORQUE 5000 // Maximum torque for M2006 motor
-#define M3508_MAX_TORQUE 7000 // Maximum torque for M3508 motor
-
 enum class MotorType {
-    M2006,
-    M3508,
-    GM6020,
+    M2006 = 0,
+    M3508 = 1,
+};
+
+enum class ControlType {
+    None = 0,
+    Acceleration = 1,
+    Velocity  = 2,
+    Position  = 3,
 };
 
 class Robomas; // Forward declaration
@@ -41,7 +40,7 @@ public:
     ~Robomas();
 
     // base functionality
-    void GetSendBuff(int16_t* data);
+    int16_t GetSendBuff();
     void SetReadData(int16_t* data);
 
     // start operation
@@ -66,15 +65,22 @@ public:
     void SetBrake();
 
     // main read
-    int16_t GetMotorTorque();
-    int16_t GetMotorSpeed();
-    int16_t GetMotorPosition();
+    uint16_t GetPosition();
+    int16_t GetVelocity();
+    int16_t GetTorque();
+    uint8_t GetTemperature();
+    void Debug();
 
 protected:
     int16_t send_buff = 0;
     int16_t read_data[4] = {0, 0, 0, 0};
+    // Posi, Velo, Torque, Temp
 
 private:
+    const int MAX_MOTOR_NUM = 8; // Maximum number of motors
+    const int M2006_MAX_TORQUE = 5000; // Maximum torque for M2006 motor
+    const int M3508_MAX_TORQUE = 7000; // Maximum torque for M3508 motor
+
     MotorType _type;
     uint16_t _feedback_id;
     uint8_t _motor_num;
@@ -90,14 +96,15 @@ private:
  */
 class RobomasSender {
 public:
-    RobomasSender(CAN& can);
+    RobomasSender(CAN& can, int can_frequency);
     ~RobomasSender();
     void InitCan();
     void SetRobomas(Robomas* robomas);
-    void Start();
+    void ReadStart();
 
     bool Send();
     void Read();
+    void Debug();
 
     uint8_t GetWriteError();
     uint8_t GetReadError();
@@ -106,6 +113,17 @@ public:
 private:
     CAN& _can;
     Robomas* _robomas;
+    int _can_frequency;
 };
 
 #endif // ROBOMAS_HPP
+
+/**
+ * メモ
+ * Position : unsigned 8*2bit
+ * Velocity : signed 8*2bit
+ * Torque   : signed 8*2bit
+ * Temperature : unsigned 8bit
+ * 
+ * read_msg.data[7] is Null
+ */

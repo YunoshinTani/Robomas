@@ -5,72 +5,84 @@
  * The Robomas class provides methods for configuring and controlling the motor, while the RobomasSender class manages the sending and receiving of CAN messages.
  * @author Yunoshin Tani (taniyunoshin@gmail.com)
  * @since 2025-04-16
- * @date 2025-04-17
- * @version 2.0.0
- * 
- * @warning This code has not been tested yet.
+ * @date 2025-04-19
+ * @version 3.0.0
  */
 
 #include "robomas.hpp"
 
 // RobomasSender class implementation
-RobomasSender::RobomasSender(CAN& can) : _can(can), _robomas{nullptr} {
-    InitCan(); // Initialize CAN communication
+RobomasSender::RobomasSender(CAN& can, int can_frequency) : _can(can), _robomas{nullptr} {
+    _can_frequency = can_frequency;
 }
 
 RobomasSender::~RobomasSender() = default;
 
 void RobomasSender::InitCan() {
-    _can.frequency(CAN_FREQUENCY); // 1Mbps
+    _can.frequency(_can_frequency); // 1Mbps
     _can.mode(CAN::Normal); // Normal mode
-    _can.reset(); // Reset CAN controller
 }
+// Note: frequency 入れると動かないかも
 
 void RobomasSender::SetRobomas(Robomas* robomas) {
     _robomas = robomas;
 }
-void RobomasSender::Start() {
+void RobomasSender::ReadStart() {
     _can.attach(callback(this, &RobomasSender::Read), CAN::RxIrq);
 }
 bool RobomasSender::Send() {
-    uint8_t success = 0;
-    for (uint8_t i=0; i<2; i++) {
-        CANMessage msg;
-        msg.id = (i == 0) ? 0x200 : 0x1FF;
-        msg.len = 8;
-        msg.format = CANStandard;
-        int16_t buff[4];
-        for (uint8_t j=0; j<4; j++) {
-            _robomas[j].GetSendBuff(&buff[j]);
-        }
-        msg.data[0] = (buff[0] >> 8) & 0xFF;
-        msg.data[1] = buff[0] & 0xFF;
-        msg.data[2] = (buff[1] >> 8) & 0xFF;
-        msg.data[3] = buff[1] & 0xFF;
-        msg.data[4] = (buff[2] >> 8) & 0xFF;
-        msg.data[5] = buff[2] & 0xFF;
-        msg.data[6] = (buff[3] >> 8) & 0xFF;
-        msg.data[7] = buff[3] & 0xFF;
-        success += _can.write(msg);
+    CANMessage msg;
+    msg.id = 0x200;
+    msg.len = 8;
+    msg.format = CANStandard;
+    int16_t buff[4];
+    for (uint8_t j=0; j<4; j++) {
+        buff[j] = _robomas[j].GetSendBuff();
     }
-    return (success == 2) ? true : false;
+    msg.data[0] = (buff[0] >> 8) & 0xFF;
+    msg.data[1] = buff[0] & 0xFF;
+    msg.data[2] = (buff[1] >> 8) & 0xFF;
+    msg.data[3] = buff[1] & 0xFF;
+    msg.data[4] = (buff[2] >> 8) & 0xFF;
+    msg.data[5] = buff[2] & 0xFF;
+    msg.data[6] = (buff[3] >> 8) & 0xFF;
+    msg.data[7] = buff[3] & 0xFF;
+    return _can.write(msg);
 }
 void RobomasSender::Read() {
-    for (uint8_t i=0; i<8; i++) {
-        CANMessage msg;
-        msg.id = _robomas[i].GetId();
-        msg.len = 8;
-        msg.format = CANStandard;
-        int16_t buff[4] = {0, 0, 0, 0};
-        if (_can.read(msg)) {
-            buff[0] = (msg.data[0] << 8) | msg.data[1];
-            buff[1] = (msg.data[2] << 8) | msg.data[3];
-            buff[2] = (msg.data[4] << 8) | msg.data[5];
-            if (_robomas[i].GetMotorType() == MotorType::M3508) {
-                buff[3] = (msg.data[6] << 8) | msg.data[7];
-            }
-            _robomas[i].SetReadData(buff);
-        }
+    int16_t buff[4] = {0, 0, 0, 0};
+    CANMessage send_msg;
+    if (_can.read(send_msg)) {
+        buff[0] = (int16_t)((send_msg.data[0] << 8) | send_msg.data[1]);
+        buff[1] = (int16_t)((send_msg.data[2] << 8) | send_msg.data[3]);
+        buff[2] = (int16_t)((send_msg.data[4] << 8) | send_msg.data[5]);
+        buff[3] = ((int16_t)send_msg.data[6]);
+        _robomas[2].SetReadData(buff); // Set read data to the motor
+    }
+}
+void RobomasSender::Debug() {
+    CANMessage read_msg;
+    if (_can.read(read_msg)) {
+        printf("TD:%3d,   ", _can.tderror()); // write error count
+        printf("RD:%3d,   ", _can.rderror()); // read error count
+        printf("ID: 0x%3x,   ", read_msg.id);
+        printf("Position:%4d,   ", (int16_t)((read_msg.data[0] << 8) | read_msg.data[1]));
+        printf("Velocity:%5d,   ", (int16_t)((read_msg.data[2] << 8) | read_msg.data[3]));
+        printf("Torque:%5d,   ",   (int16_t)((read_msg.data[4] << 8) | read_msg.data[5]));
+        printf("Temperature:%2d,       ", (int16_t)read_msg.data[6]);
+        printf("0:%2d,   ", (uint8_t)read_msg.data[0]);
+        printf("1:%3d,   ", (uint8_t)read_msg.data[1]);
+        printf("2:%3d,   ", (uint8_t)read_msg.data[2]);
+        printf("3:%3d,   ", (uint8_t)read_msg.data[3]);
+        printf("4:%3d,   ", (uint8_t)read_msg.data[4]);
+        printf("5:%3d,   ", (uint8_t)read_msg.data[5]);
+        printf("6:%2d,   ", (uint8_t)read_msg.data[6]);
+        printf("7:%2d,   ", (uint8_t)read_msg.data[7]);
+        // Note: data[7] is Null
+        printf("\n");
+    }
+    else {
+        printf("No message\r");
     }
 }
 uint8_t RobomasSender::GetWriteError() {
@@ -99,11 +111,13 @@ Robomas::Robomas(MotorType type, uint8_t motor_num) {
 Robomas::~Robomas() = default;
 
 // base functionality
-void Robomas::GetSendBuff(int16_t* data) {
-    *data = send_buff;
+int16_t Robomas::GetSendBuff() {
+    return send_buff;
 }
 void Robomas::SetReadData(int16_t* data) {
-    memcpy(read_data, data, sizeof(read_data));
+    for (uint8_t i=0; i<4; i++) {
+        read_data[i] = data[i];
+    }
 }
 
 // start/stop functionality
@@ -112,6 +126,7 @@ void Robomas::Init() {
     for (uint8_t i=0; i<4; i++) {
         read_data[i] = 0;
     }
+    SetTorque(0); // Set torque to 0
 }
 
 // set configure
@@ -162,14 +177,30 @@ void Robomas::SetBrake() {
 }
 
 // main read
-int16_t Robomas::GetMotorTorque() {
-    return read_data[this->GetMotorNum()];
+uint16_t Robomas::GetPosition() {
+    return read_data[0];
 }
-int16_t Robomas::GetMotorSpeed() {
-    return read_data[this->GetMotorNum()];
+int16_t Robomas::GetVelocity() {
+    return read_data[1];
 }
-int16_t Robomas::GetMotorPosition() {
-    return read_data[this->GetMotorNum()];
+int16_t Robomas::GetTorque() {
+    return read_data[2];
 }
+uint8_t Robomas::GetTemperature() {
+    if (_type == MotorType::M3508) {
+        return read_data[3];
+    }
+    else {
+        printf("Robomas::GetTemperature: 'This function is not supported for this motor type.'\n");
+        return 0;
+    }
+}
+void Robomas::Debug() {
+    printf("Pos:%4d,   ", GetPosition());    // Get motor position from c620[0]
+    printf("Vel:%5d,   ", GetVelocity());    // Get motor position from c620[1]
+    printf("Tor:%5d,   ", GetTorque());      // Get motor position from c620[2]
+    printf("Tem:%2d,   ", GetTemperature()); // Get motor position from c620[3]
+}
+
 // Robomas class implementation
 // RobomasSender class implementation
