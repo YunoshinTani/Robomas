@@ -6,7 +6,7 @@
  * @author Yunoshin Tani (taniyunoshin@gmail.com)
  * @since 2025-04-16
  * @date 2025-04-19
- * @version 3.0.0
+ * @version 3.1.0
  */
 
 #include "robomas.hpp"
@@ -24,40 +24,43 @@ void RobomasSender::InitCan() {
 }
 // Note: frequency 入れると動かないかも
 
-void RobomasSender::SetRobomas(Robomas* robomas) {
+void RobomasSender::SetRobomas(Robomas* robomas, uint8_t robomas_num) {
     _robomas = robomas;
+    _robomas_num = robomas_num;
 }
 void RobomasSender::ReadStart() {
     _can.attach(callback(this, &RobomasSender::Read), CAN::RxIrq);
 }
 bool RobomasSender::Send() {
-    CANMessage msg;
-    msg.id = 0x200;
-    msg.len = 8;
-    msg.format = CANStandard;
+    CANMessage send_msg;
+    send_msg.id = 0x200;
+    send_msg.len = 8;
+    send_msg.format = CANStandard;
     int16_t buff[4];
-    for (uint8_t j=0; j<4; j++) {
-        buff[j] = _robomas[j].GetSendBuff();
+    for (uint8_t j=0; j<_robomas_num; j++) {
+        buff[_robomas[j].GetMotorNum() - 1] = _robomas[j].GetSendBuff();
     }
-    msg.data[0] = (buff[0] >> 8) & 0xFF;
-    msg.data[1] = buff[0] & 0xFF;
-    msg.data[2] = (buff[1] >> 8) & 0xFF;
-    msg.data[3] = buff[1] & 0xFF;
-    msg.data[4] = (buff[2] >> 8) & 0xFF;
-    msg.data[5] = buff[2] & 0xFF;
-    msg.data[6] = (buff[3] >> 8) & 0xFF;
-    msg.data[7] = buff[3] & 0xFF;
-    return _can.write(msg);
+    send_msg.data[0] = (buff[0] >> 8) & 0xFF;
+    send_msg.data[1] = buff[0] & 0xFF;
+    send_msg.data[2] = (buff[1] >> 8) & 0xFF;
+    send_msg.data[3] = buff[1] & 0xFF;
+    send_msg.data[4] = (buff[2] >> 8) & 0xFF;
+    send_msg.data[5] = buff[2] & 0xFF;
+    send_msg.data[6] = (buff[3] >> 8) & 0xFF;
+    send_msg.data[7] = buff[3] & 0xFF;
+    bool ret = _can.write(send_msg); // Send message
+    ThisThread::sleep_for((std::chrono::milliseconds)((int)(_robomas[0].GetDt() * 1000))); // Wait for 1ms
+    return ret;
 }
 void RobomasSender::Read() {
     int16_t buff[4] = {0, 0, 0, 0};
-    CANMessage send_msg;
-    if (_can.read(send_msg)) {
-        buff[0] = (int16_t)((send_msg.data[0] << 8) | send_msg.data[1]);
-        buff[1] = (int16_t)((send_msg.data[2] << 8) | send_msg.data[3]);
-        buff[2] = (int16_t)((send_msg.data[4] << 8) | send_msg.data[5]);
-        buff[3] = ((int16_t)send_msg.data[6]);
-        _robomas[2].SetReadData(buff); // Set read data to the motor
+    CANMessage read_msg;
+    if (_can.read(read_msg)) {
+        buff[0] = (int16_t)((read_msg.data[0] << 8) | read_msg.data[1]);
+        buff[1] = (int16_t)((read_msg.data[2] << 8) | read_msg.data[3]);
+        buff[2] = (int16_t)((read_msg.data[4] << 8) | read_msg.data[5]);
+        buff[3] = ((int16_t)read_msg.data[6]);
+        _robomas[read_msg.id - 0x200 - 1].SetReadData(buff); // Set read data to the motor
     }
 }
 void RobomasSender::Debug() {
@@ -91,20 +94,18 @@ uint8_t RobomasSender::GetWriteError() {
 uint8_t RobomasSender::GetReadError() {
     return _can.rderror();
 }
-bool RobomasSender::GetBusOn() {
-    return ((_can.rderror() >= 248) | (_can.tderror() >= 248)) ? false : true;
-}
 void RobomasSender::CanReset() {
     _can.reset();
 }
 
 // Robomas class implementation
-Robomas::Robomas(MotorType type, uint8_t motor_num) {
+Robomas::Robomas(MotorType type, uint8_t motor_num, float Kp, float Ki, float Kd, float dt) {
     _type = type;
     _feedback_id = motor_num + 0x200;
     _motor_num = motor_num;
-    _max_torque_limit = (type == MotorType::M2006) ? M2006_MAX_TORQUE : M3508_MAX_TORQUE;
-    _torque_limit = _max_torque_limit;
+    _max_current = (type == MotorType::M2006) ? M2006::MAX_CURRENT : M3508::MAX_CURRENT;
+    _max_rpm = (type == MotorType::M2006) ? M2006::MAX_RPM : M3508::MAX_RPM;
+    SetPidGain(Kp, Kd, Ki, dt); // Set PID gain
     Init();
 }
 
@@ -120,36 +121,41 @@ void Robomas::SetReadData(int16_t* data) {
     }
 }
 
-// start/stop functionality
+// init functionality
 void Robomas::Init() {
     send_buff = 0;
     for (uint8_t i=0; i<4; i++) {
         read_data[i] = 0;
     }
-    SetTorque(0); // Set torque to 0
+    SetCurrent(0); // Set current to 0
 }
 
 // set configure
-void Robomas::SetId(uint16_t id) {
-    _feedback_id = (id <= 8) ? id + 0x200 : id;
-}
 void Robomas::SetMotorNum(uint8_t number) {
     _motor_num = number;
+    _feedback_id = number + 0x200;
 }
 void Robomas::SetMotorType(MotorType type)  {
     _type = type;
 }
-void Robomas::SetTorqueLimit(int16_t limit) {
-    if (limit <= _max_torque_limit) {
-        _torque_limit = limit;
-    } else {
-        _torque_limit = _max_torque_limit;
-        printf("Robomas::SetTorqueLimit: 'Torque limit exceeds maximum limit. Setting to maximum.'\n");
-    }
+void Robomas::SetCurrentLimit(uint16_t limit) {
+    _max_current = limit;
+}
+void Robomas::SetTorqueLimit(uint16_t limit) {
+    SetCurrentLimit(limit / (_type == MotorType::M2006 ? M2006::TORQUE_CONSTANT : M3508::TORQUE_CONSTANT)); // Set torque limit
+}
+void Robomas::SetRpmLimit(uint16_t limit) {
+    _max_rpm = limit;
+}
+void Robomas::SetPidGain(float Kp, float Kd, float Ki, float dt) {
+    _Kp = Kp;
+    _Kd = Kd;
+    _Ki = Ki;
+    _dt = dt;
 }
 
 // get configure
-uint16_t Robomas::GetId() const {
+uint16_t Robomas::GetReadId() const {
     return _feedback_id;
 }
 uint8_t Robomas::GetMotorNum() const {
@@ -158,29 +164,68 @@ uint8_t Robomas::GetMotorNum() const {
 MotorType Robomas::GetMotorType() const {
     return _type;
 }
-int16_t Robomas::GetTorqueLimit() const {
-    return _torque_limit;
+uint16_t Robomas::GetCurrentLimit() const {
+    return _max_current;
+}
+uint16_t Robomas::GetTorqueLimit() const {
+    return _max_current * (_type == MotorType::M2006 ? M2006::TORQUE_CONSTANT : M3508::TORQUE_CONSTANT); // Get torque limit
+}
+uint16_t Robomas::GetRpmLimit() const {
+    return _max_rpm;
+}
+float Robomas::GetDt() const {
+    return _dt;
 }
 
 // main write
-void Robomas::SetTorque(int16_t torque) {
-    send_buff = (torque <= _torque_limit) ? torque : _torque_limit;
+void Robomas::SetCurrent(int16_t current) {
+    if (current > _max_current) {
+        current = _max_current;
+    } else if (current < -_max_current) {
+        current = -_max_current;
+    }
+    send_buff = current;
 }
-void Robomas::SetSpeed(uint8_t speed) {
-    // PIDを実装
+void Robomas::SetTorque(int16_t torque) {
+    if (_type == MotorType::M2006) {
+        SetCurrent(torque / M2006::TORQUE_CONSTANT);
+    } else if (_type == MotorType::M3508) {
+        SetCurrent(torque / M3508::TORQUE_CONSTANT);
+    }
+}
+void Robomas::SetRpm(int16_t target_rpm) {
+    _current = GetRpm();
+    _error = target_rpm - _current;
+    _integral += _error * _dt;
+    _derivative = (_error - _prev_error) / _dt;
+    _output = (int16_t)(_Kp * _error + _Ki * _integral + _Kd * _derivative);
+    if (_output > _max_rpm) _output = _max_rpm;
+    else if (_output < -_max_rpm) _output = -_max_rpm;
+    _prev_error = _error;
+    SetCurrent(_output);
 }
 void Robomas::SetPosition(int16_t position) {
-    // PIDを実装
+    _current = GetPosition();
+    _error = position - _current;
+    _integral += _error * _dt;
+    _derivative = (_error - _prev_error) / _dt;
+    _output = (int16_t)(_Kp * _error + _Ki * _integral + _Kd * _derivative);
+    SetCurrent(_output);
+    _prev_error = _error;
 }
 void Robomas::SetBrake() {
-    // PIDを実装
+    SetRpm(0); // Set RPM to 0
 }
 
 // main read
 uint16_t Robomas::GetPosition() {
     return read_data[0];
 }
-int16_t Robomas::GetVelocity() {
+int Robomas::GetTotalPosition() {
+    // 角度の合計値
+    return 0;
+}
+int16_t Robomas::GetRpm() {
     return read_data[1];
 }
 int16_t Robomas::GetTorque() {
@@ -196,10 +241,10 @@ uint8_t Robomas::GetTemperature() {
     }
 }
 void Robomas::Debug() {
-    printf("Pos:%4d,   ", GetPosition());    // Get motor position from c620[0]
-    printf("Vel:%5d,   ", GetVelocity());    // Get motor position from c620[1]
-    printf("Tor:%5d,   ", GetTorque());      // Get motor position from c620[2]
-    printf("Tem:%2d,   ", GetTemperature()); // Get motor position from c620[3]
+    printf("Pos:%4d,   ", GetPosition());    // Get motor position
+    printf("RPM:%5d,   ", GetRpm());         // Get motor RPM
+    printf("Tor:%5d,   ", GetTorque());      // Get motor torque(current)
+    printf("Tem:%2d,   ", GetTemperature()); // Get motor temperature
 }
 
 // Robomas class implementation
