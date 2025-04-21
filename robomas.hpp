@@ -37,7 +37,7 @@ class RobomasSender;
  */
 class Robomas {
 public:
-    Robomas(MotorType type, uint8_t motor_num, float Kp = 0.0, float Ki = 0.0, float Kd = 0.0, float dt = 0.01);
+    Robomas(MotorType type, uint8_t motor_num, float Kp = 0.0, float Ki = 0.0, float Kd = 0.0, std::chrono::milliseconds dt = 10ms);
     ~Robomas();
 
     // base functionality
@@ -45,7 +45,7 @@ public:
     void SetReadData(int16_t* data);
 
     // start operation
-    void Init();
+    void InitData();
 
     // SetConfigure
     void SetMotorNum(uint8_t number);
@@ -53,7 +53,12 @@ public:
     void SetCurrentLimit(uint16_t limit);
     void SetTorqueLimit(uint16_t limit);
     void SetRpmLimit(uint16_t limit);
-    void SetPidGain(float Kp, float Ki, float Kd, float dt);
+
+    // PID functionality
+    void Pid(int16_t target, int16_t current, uint16_t max);
+    void SetPidGain(float Kp, float Ki, float Kd, std::chrono::milliseconds dt);
+    void ResetPid();
+    void UpdatePid();
 
     // GetConfigure
     uint16_t GetReadId() const;
@@ -62,13 +67,12 @@ public:
     uint16_t GetCurrentLimit() const;
     uint16_t GetTorqueLimit() const;
     uint16_t GetRpmLimit() const;
-    float GetDt() const;
 
     // main write
     void SetCurrent(int16_t current); // A
     void SetTorque(int16_t torque); // Nm
     void SetRpm(int16_t rpm); // rpm
-    void SetPosition(int16_t position); // degree
+    void SetPosition(int16_t target_position); // degree
     void SetBrake();
 
     // main read
@@ -82,7 +86,7 @@ public:
 
 protected:
     int16_t send_buff = 0; // current
-    int16_t read_data[4] = {0, 0, 0, 0}; // Posi, Velo, Torque, Temp
+    int16_t read_data[4] = {0, 0, 0, 0}; // Posi, RPM, Torque, Temp
 
 private:
     const int MAX_MOTOR_NUM = 8; // Maximum number of motors
@@ -110,13 +114,18 @@ private:
     float _Ki;
     float _Kd;
 
+    float _now_time; // Get current time
+    float _prev_time; // Previous time for PID calculation
+    float _sec_dt; // Convert milliseconds to seconds
+
     int16_t _current;
-    float _error = 0.0;
-    float _integral = 0.0;
-    float _derivative = 0.0;
-    float _prev_error = 0.0;
-    int16_t _output = 0.0;
-    float _dt = 0.01; // 10ms
+    int16_t _target;
+    uint16_t _output_max;
+    float _error;
+    float _integral;
+    float _derivative;
+    float _prev_error;
+    int16_t _output;
 };
 
 /**

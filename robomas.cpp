@@ -36,7 +36,7 @@ bool RobomasSender::Send() {
     send_msg.id = 0x200;
     send_msg.len = 8;
     send_msg.format = CANStandard;
-    int16_t buff[4];
+    int16_t buff[4] = {0, 0, 0, 0};
     for (uint8_t j=0; j<_robomas_num; j++) {
         buff[_robomas[j].GetMotorNum() - 1] = _robomas[j].GetSendBuff();
     }
@@ -48,9 +48,7 @@ bool RobomasSender::Send() {
     send_msg.data[5] = buff[2] & 0xFF;
     send_msg.data[6] = (buff[3] >> 8) & 0xFF;
     send_msg.data[7] = buff[3] & 0xFF;
-    bool ret = _can.write(send_msg); // Send message
-    ThisThread::sleep_for((std::chrono::milliseconds)((int)(_robomas[0].GetDt() * 1000))); // Wait for 1ms
-    return ret;
+    return _can.write(send_msg); // Send message;
 }
 void RobomasSender::Read() {
     int16_t buff[4] = {0, 0, 0, 0};
@@ -59,7 +57,7 @@ void RobomasSender::Read() {
         buff[0] = (int16_t)((read_msg.data[0] << 8) | read_msg.data[1]);
         buff[1] = (int16_t)((read_msg.data[2] << 8) | read_msg.data[3]);
         buff[2] = (int16_t)((read_msg.data[4] << 8) | read_msg.data[5]);
-        buff[3] = ((int16_t)read_msg.data[6]);
+        buff[3] = (int16_t)read_msg.data[6];
         _robomas[read_msg.id - 0x200 - 1].SetReadData(buff); // Set read data to the motor
     }
 }
@@ -99,14 +97,18 @@ void RobomasSender::CanReset() {
 }
 
 // Robomas class implementation
-Robomas::Robomas(MotorType type, uint8_t motor_num, float Kp, float Ki, float Kd, float dt) {
+Robomas::Robomas(MotorType type, uint8_t motor_num, float Kp, float Ki, float Kd, std::chrono::milliseconds dt) {
     _type = type;
     _feedback_id = motor_num + 0x200;
     _motor_num = motor_num;
     _max_current = (type == MotorType::M2006) ? M2006::MAX_CURRENT : M3508::MAX_CURRENT;
     _max_rpm = (type == MotorType::M2006) ? M2006::MAX_RPM : M3508::MAX_RPM;
-    SetPidGain(Kp, Kd, Ki, dt); // Set PID gain
-    Init();
+    InitData();
+    SetPidGain(Kp, Ki, Kd, dt); // Set PID gain
+    ResetPid(); // Reset PID values
+    _now_time = HighResClock::now().time_since_epoch().count() / 1e6; // Get current time
+    _prev_time = _now_time; // Get previous time
+    _sec_dt = static_cast<float>(dt.count()) / 1000.0f; // Convert milliseconds to seconds
 }
 
 Robomas::~Robomas() = default;
@@ -122,7 +124,7 @@ void Robomas::SetReadData(int16_t* data) {
 }
 
 // init functionality
-void Robomas::Init() {
+void Robomas::InitData() {
     send_buff = 0;
     for (uint8_t i=0; i<4; i++) {
         read_data[i] = 0;
@@ -147,11 +149,48 @@ void Robomas::SetTorqueLimit(uint16_t limit) {
 void Robomas::SetRpmLimit(uint16_t limit) {
     _max_rpm = limit;
 }
-void Robomas::SetPidGain(float Kp, float Kd, float Ki, float dt) {
+
+// PID functionality
+void Robomas::SetPidGain(float Kp, float Kd, float Ki, std::chrono::milliseconds dt) {
     _Kp = Kp;
     _Kd = Kd;
     _Ki = Ki;
-    _dt = dt;
+    _sec_dt = static_cast<float>(dt.count()) / 1000.0f;  // Convert milliseconds to seconds
+}
+void Robomas::ResetPid() {
+    _current = 0;
+    _target = 0;
+    _output_max = 0;
+    _error = 0.0f;
+    _integral = 0.0f;
+    _derivative = 0.0f;
+    _prev_error = 0.0f;
+    _output = 0.0f;
+}
+void Robomas::Pid(int16_t target, int16_t current, uint16_t max) {
+    _target = target;
+    _current = current;
+    _output_max = max;
+    UpdatePid();
+}
+void Robomas::UpdatePid() {
+    _now_time = HighResClock::now().time_since_epoch().count() / 1e6; // Get current time
+    if (_now_time - _prev_time >= _sec_dt) {
+        _error = _target - _current;
+        _integral += _error * _sec_dt; // Integral term
+        _derivative = (_error - _prev_error) / _sec_dt;
+        _output = (int16_t)(_Kp * _error + _Ki * _integral + _Kd * _derivative);
+        if (_output > _output_max) _output = _output_max;
+        else if (_output < -_output_max) _output = -_output_max;
+        _prev_error = _error;
+        SetTorque(_output);
+        _prev_time = _now_time; // Update previous time
+    }
+    // printf("current:%5d,   ", _current);
+    // printf("error:%5.2f,   ", _error); // Debug output
+    // printf("integral:%5.2f,   ", _integral); // Debug output
+    // printf("derivative:%5.2f,   ", _derivative); // Debug output
+    // printf("output:%5d,   ", _output);
 }
 
 // get configure
@@ -173,9 +212,6 @@ uint16_t Robomas::GetTorqueLimit() const {
 uint16_t Robomas::GetRpmLimit() const {
     return _max_rpm;
 }
-float Robomas::GetDt() const {
-    return _dt;
-}
 
 // main write
 void Robomas::SetCurrent(int16_t current) {
@@ -194,24 +230,10 @@ void Robomas::SetTorque(int16_t torque) {
     }
 }
 void Robomas::SetRpm(int16_t target_rpm) {
-    _current = GetRpm();
-    _error = target_rpm - _current;
-    _integral += _error * _dt;
-    _derivative = (_error - _prev_error) / _dt;
-    _output = (int16_t)(_Kp * _error + _Ki * _integral + _Kd * _derivative);
-    if (_output > _max_rpm) _output = _max_rpm;
-    else if (_output < -_max_rpm) _output = -_max_rpm;
-    _prev_error = _error;
-    SetCurrent(_output);
+    Pid(target_rpm, GetRpm(), _max_rpm); // Set target rpm and current rpm
 }
-void Robomas::SetPosition(int16_t position) {
-    _current = GetPosition();
-    _error = position - _current;
-    _integral += _error * _dt;
-    _derivative = (_error - _prev_error) / _dt;
-    _output = (int16_t)(_Kp * _error + _Ki * _integral + _Kd * _derivative);
-    SetCurrent(_output);
-    _prev_error = _error;
+void Robomas::SetPosition(int16_t target_position) {
+    Pid(target_position, GetPosition(), _max_rpm); // Set target position and current position
 }
 void Robomas::SetBrake() {
     SetRpm(0); // Set RPM to 0
