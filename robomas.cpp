@@ -5,8 +5,8 @@
  * The Robomas class provides methods for configuring and controlling the motor, while the RobomasSender class manages the sending and receiving of CAN messages.
  * @author Yunoshin Tani (taniyunoshin@gmail.com)
  * @since 2025-04-16
- * @date 2025-04-19
- * @version 3.1.0
+ * @date 2025-04-22
+ * @version 3.2.0
  */
 
 #include "robomas.hpp"
