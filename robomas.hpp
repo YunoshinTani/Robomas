@@ -5,8 +5,8 @@
  * The Robomas class provides methods for configuring and controlling the motor, while the RobomasSender class manages the sending and receiving of CAN messages.
  * @author Yunoshin Tani (taniyunoshin@gmail.com)
  * @since 2025-04-16
- * @date 2025-04-22
- * @version 3.2.0
+ * @date 2025-04-29
+ * @version 3.3.0
  */
 
 #ifndef ROBOMAS_HPP
@@ -41,48 +41,48 @@ public:
     ~Robomas();
 
     // base functionality
-    int16_t GetSendBuff();
-    void SetReadData(int16_t* data);
+    int16_t getSendBuff();
+    void setReadData(int16_t* data);
 
     // start operation
-    void InitData();
+    void resetData();
 
     // SetConfigure
-    void SetMotorNum(uint8_t number);
-    void SetMotorType(MotorType type);
-    void SetCurrentLimit(uint16_t limit);
-    void SetTorqueLimit(uint16_t limit);
-    void SetRpmLimit(uint16_t limit);
+    void setMotorNum(uint8_t number);
+    void setMotorType(MotorType type);
+    void setCurrentLimit(uint16_t limit);
+    void setTorqueLimit(uint16_t limit);
+    void setRpmLimit(uint16_t limit);
 
     // PID functionality
-    void Pid(int16_t target, int16_t current, uint16_t max);
-    void SetPidGain(float Kp, float Ki, float Kd, std::chrono::milliseconds dt);
-    void ResetPid();
-    void UpdatePid();
+    void pid(int16_t target, int16_t current, uint16_t max);
+    void setPidGain(float Kp, float Ki, float Kd, std::chrono::milliseconds dt);
+    void resetPid();
+    void updatePid();
 
     // GetConfigure
-    uint16_t GetReadId() const;
-    uint8_t GetMotorNum() const;
-    MotorType GetMotorType() const;
-    uint16_t GetCurrentLimit() const;
-    uint16_t GetTorqueLimit() const;
-    uint16_t GetRpmLimit() const;
+    uint16_t  getReadId() const;
+    uint8_t   getMotorNum() const;
+    MotorType getMotorType() const;
+    uint16_t  getCurrentLimit() const;
+    uint16_t  getTorqueLimit() const;
+    uint16_t  getRpmLimit() const;
 
     // main write
-    void SetCurrent(int16_t current); // A
-    void SetTorque(int16_t torque); // Nm
-    void SetRpm(int16_t rpm); // rpm
-    void SetPosition(int16_t target_position); // degree
-    void SetBrake();
+    void setCurrent(int16_t current); // A
+    void setTorque(int16_t torque); // Nm
+    void setRpm(int16_t rpm); // rpm
+    void setPosition(int16_t target_position); // degree
+    void setBrake();
 
     // main read
-    uint16_t GetPosition();
-    int GetTotalPosition();
-    int16_t GetRpm();
-    int16_t GetTorque();
-    uint8_t GetTemperature();
+    uint16_t getPosition();
+    int      getTotalPosition();
+    int16_t  getRpm();
+    int16_t  getTorque();
+    uint8_t  getTemperature();
 
-    void Debug();
+    void debug();
 
 protected:
     int16_t send_buff = 0; // current
@@ -104,10 +104,10 @@ private:
     };
 
     MotorType _type;
-    uint16_t _feedback_id;
-    uint8_t _motor_num;
-    uint16_t _max_current;
-    uint16_t _max_rpm;
+    uint16_t  _feedback_id;
+    uint8_t   _motor_num;
+    uint16_t  _max_current;
+    uint16_t  _max_rpm;
 
     // PID control parameters
     float _Kp;
@@ -118,14 +118,14 @@ private:
     float _prev_time; // Previous time for PID calculation
     float _sec_dt; // Convert milliseconds to seconds
 
-    int16_t _current;
-    int16_t _target;
+    int16_t  _current;
+    int16_t  _target;
     uint16_t _output_max;
-    float _error;
-    float _integral;
-    float _derivative;
-    float _prev_error;
-    int16_t _output;
+    float    _error;
+    float    _integral;
+    float    _derivative;
+    float    _prev_error;
+    int16_t  _output;
 };
 
 /**
@@ -138,22 +138,22 @@ class RobomasSender {
 public:
     RobomasSender(CAN& can, int can_frequency);
     ~RobomasSender();
-    void InitCan();
-    void SetRobomas(Robomas* robomas, uint8_t robomas_num);
-    void ReadStart();
+    void initCan();
+    void setRobomas(Robomas* robomas, uint8_t robomas_num);
+    void readStart();
 
-    bool Send();
-    void Read();
-    void Debug();
+    bool send();
+    void read();
+    void debug();
 
-    uint8_t GetWriteError();
-    uint8_t GetReadError();
-    void CanReset();
+    uint8_t getWriteError();
+    uint8_t getReadError();
+    void    canReset();
 private:
-    CAN& _can;
+    CAN&     _can;
     Robomas* _robomas;
-    int _can_frequency;
-    uint8_t _robomas_num = 1;
+    int      _can_frequency;
+    uint8_t  _robomas_num = 1;
 };
 
 #endif // ROBOMAS_HPP
